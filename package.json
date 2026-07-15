@@ -41,6 +41,7 @@
     "prepare": "vp config"
   },
   "devDependencies": {
+    "@eslint/core": "^1.2.1",
     "@eslint/css": "^1.4.0",
     "@eslint/css-tree": "^4.0.4",
     "@types/node": "^26.1.1",
