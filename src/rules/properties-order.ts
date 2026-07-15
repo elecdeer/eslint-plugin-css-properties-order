@@ -18,11 +18,11 @@ import {
   type UnspecifiedOption,
 } from "../lib/order.ts";
 
-type SecondaryOptions = {
+export type SecondaryOptions = {
   unspecified?: UnspecifiedOption;
 };
 
-type PropertiesOrderRuleDefinition = CSSRuleDefinition<{
+export type PropertiesOrderRuleDefinition = CSSRuleDefinition<{
   RuleOptions: [PrimaryOption?, SecondaryOptions?];
   MessageIds: "expectedOrder";
 }>;

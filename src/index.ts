@@ -5,9 +5,26 @@
  */
 import type { Linter } from "eslint";
 import pkg from "../package.json" with { type: "json" };
-import propertiesOrder from "./rules/properties-order.ts";
+import propertiesOrder, { type PropertiesOrderRuleDefinition } from "./rules/properties-order.ts";
 
-const plugin = {
+/**
+ * The plugin object shape. Annotated explicitly so declaration emit does not
+ * have to name internal types from transitive dependencies.
+ */
+type CssOrderPlugin = {
+  meta: {
+    name: string;
+    version: string;
+  };
+  rules: {
+    "properties-order": PropertiesOrderRuleDefinition;
+  };
+  configs: {
+    recommended: Linter.Config;
+  };
+};
+
+const plugin: CssOrderPlugin = {
   meta: {
     name: "eslint-plugin-css-order",
     version: pkg.version,
@@ -17,9 +34,7 @@ const plugin = {
   },
   // configs は plugin 自身を参照するため定義後に代入する (typescript-eslint と
   // 同じパターン)。初期化順の都合でこの 1 箇所のみ型アサーションを使う。
-  configs: {} as {
-    recommended: Linter.Config;
-  },
+  configs: {} as CssOrderPlugin["configs"],
 };
 
 Object.assign(plugin.configs, {
