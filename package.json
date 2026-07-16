@@ -11,15 +11,15 @@
     "properties-order",
     "stylelint-order"
   ],
-  "homepage": "https://github.com/elecdeer/eslint-plugin-css-order#readme",
+  "homepage": "https://github.com/elecdeer/eslint-plugin-css-properties-order#readme",
   "bugs": {
-    "url": "https://github.com/elecdeer/eslint-plugin-css-order/issues"
+    "url": "https://github.com/elecdeer/eslint-plugin-css-properties-order/issues"
   },
   "license": "MIT",
   "author": "elecdeer <dev@elecdeer.dev>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/elecdeer/eslint-plugin-css-order.git"
+    "url": "git+https://github.com/elecdeer/eslint-plugin-css-properties-order.git"
   },
   "files": [
     "dist"

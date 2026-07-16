@@ -46,7 +46,7 @@ const propertiesOrder: PropertiesOrderRuleDefinition = {
     fixable: "code",
     docs: {
       description: "Enforce the order of properties within declaration blocks",
-      url: "https://github.com/elecdeer/eslint-plugin-css-order#properties-order",
+      url: "https://github.com/elecdeer/eslint-plugin-css-properties-order#properties-order",
     },
     messages: {
       expectedOrder: 'Expected "{{property}}" to come before "{{before}}".',
