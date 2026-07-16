@@ -125,4 +125,4 @@ Releases are managed with pnpm's native change intents (changesets-compatible):
 
 ## License
 
-MIT. The default property order data is derived from [stylelint-config-recess-order](https://github.com/stormwarning/stylelint-config-recess-order) (ISC).
+Apache-2.0. The default property order data is derived from [stylelint-config-recess-order](https://github.com/stormwarning/stylelint-config-recess-order) (ISC).
