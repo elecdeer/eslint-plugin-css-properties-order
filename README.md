@@ -115,6 +115,14 @@ vp check     # format, lint, and type check
 vp pack      # build the library
 ```
 
+## Release
+
+Releases are managed with pnpm's native change intents (changesets-compatible):
+
+1. Record a change intent alongside your change: `pnpm change` (writes to `.changeset/`).
+2. When intents land on `main`, the Release workflow opens/updates a release PR that applies `pnpm version -r` (version bump + changelog).
+3. Merging the release PR publishes to npm via OIDC trusted publishing and creates a GitHub Release.
+
 ## License
 
 MIT. The default property order data is derived from [stylelint-config-recess-order](https://github.com/stormwarning/stylelint-config-recess-order) (ISC).

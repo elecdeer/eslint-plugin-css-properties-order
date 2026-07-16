@@ -1,0 +1,137 @@
+name: Release
+
+# リリースフロー (pnpm ネイティブの change intent を利用):
+#   1. 変更時に `pnpm change` で .changeset/ に intent を記録してマージする
+#   2. main に未消費の intent があると、このワークフローが `pnpm version -r` を
+#      適用した Release PR (release/main ブランチ) を作成/更新する
+#   3. Release PR をマージすると、このワークフローが npm へ OIDC (trusted
+#      publishing) で publish し、git タグと GitHub Release を作成する
+#
+# 注意: 初回 publish は npm の仕様上 OIDC では行えないため手動で行うこと。
+# 以降は npmjs.com のパッケージ設定で Trusted Publisher (このリポジトリ +
+# release.yml) を登録しておくこと。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Release PR の更新と publish が並行しないよう直列化する (キャンセルはしない)
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # release/main ブランチの push と GitHub Release の作成
+      pull-requests: write # Release PR の作成・更新
+      id-token: write # npm への OIDC publish
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 未消費の change intent があるかで「Release PR 更新」か「publish 判定」に分岐する
+      - name: Detect pending change intents
+        id: plan
+        run: |
+          if pnpm change status | grep -q "Pending change intents:"; then
+            echo "pending=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pending=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update release PR
+        if: steps.plan.outputs.pending == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C release/main
+
+          # intent を消費して version bump + changelog 生成 + ledger 記録を行う
+          pnpm version -r
+
+          VERSION=$(jq -r '.version' package.json)
+          NAME=$(jq -r '.name' package.json)
+          git add -A
+          git commit -m "chore: release v$VERSION"
+          git push -f origin release/main
+
+          TITLE="chore: release v$VERSION"
+          BODY_FILE=$(mktemp)
+          {
+            echo "このPRをマージすると v$VERSION が npm に publish されます。"
+            echo
+            cat ".changeset/changelogs/$NAME@$VERSION.md"
+          } > "$BODY_FILE"
+
+          PR_NUMBER=$(gh pr list --head release/main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
+          else
+            gh pr create --head release/main --title "$TITLE" --body-file "$BODY_FILE"
+          fi
+
+          {
+            echo "## Release PR"
+            echo "v$VERSION の Release PR を作成/更新しました。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check whether current version needs publishing
+        if: steps.plan.outputs.pending == 'false'
+        id: check
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          NAME=$(jq -r '.name' package.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+          # Release PR を経ていない version (changelog が無い) は publish しない
+          if [ ! -f ".changeset/changelogs/$NAME@$VERSION.md" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "changelog が無いため publish しません (v$VERSION)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # 既に npm に存在する version は publish しない
+          if pnpm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "v$VERSION は公開済みのため publish しません" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # OIDC (trusted publishing) で publish する。provenance も自動付与される
+      - name: Publish to npm
+        if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
+        run: pnpm publish --access public --provenance --no-git-checks
+
+      - name: Create GitHub Release
+        if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.check.outputs.version }}
+          NAME: ${{ steps.check.outputs.name }}
+        run: |
+          gh release create "v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes-file ".changeset/changelogs/$NAME@$VERSION.md"
+
+          {
+            echo "## Published"
+            echo "v$VERSION を npm に publish し、GitHub Release を作成しました。"
+          } >> "$GITHUB_STEP_SUMMARY"
