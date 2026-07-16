@@ -1,4 +1,4 @@
-# eslint-plugin-css-order
+# eslint-plugin-css-properties-order
 
 ESLint plugin to enforce CSS property order for [@eslint/css](https://github.com/eslint/css), ported from [stylelint-order](https://github.com/hudochenkov/stylelint-order)'s `order/properties-order` rule.
 
@@ -7,7 +7,7 @@ The default order follows [stylelint-config-recess-order](https://github.com/sto
 ## Installation
 
 ```bash
-npm install --save-dev eslint @eslint/css eslint-plugin-css-order
+npm install --save-dev eslint @eslint/css eslint-plugin-css-properties-order
 ```
 
 Requires ESLint >= 9.15.0 (flat config) and @eslint/css >= 1.0.0.
@@ -17,7 +17,7 @@ Requires ESLint >= 9.15.0 (flat config) and @eslint/css >= 1.0.0.
 ```js
 // eslint.config.js
 import css from "@eslint/css";
-import cssOrder from "eslint-plugin-css-order";
+import cssOrder from "eslint-plugin-css-properties-order";
 
 export default [
   {
@@ -35,7 +35,7 @@ Or use the recommended config (still requires the `language` setup from @eslint/
 
 ```js
 import css from "@eslint/css";
-import cssOrder from "eslint-plugin-css-order";
+import cssOrder from "eslint-plugin-css-properties-order";
 
 export default [
   {

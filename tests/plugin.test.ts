@@ -90,7 +90,7 @@ describe("configs.recommended", () => {
 
 describe("plugin metadata", () => {
   test("meta と rules が公開されている", () => {
-    expect(plugin.meta.name).toBe("eslint-plugin-css-order");
+    expect(plugin.meta.name).toBe("eslint-plugin-css-properties-order");
     expect(Object.keys(plugin.rules)).toEqual(["properties-order"]);
   });
 });

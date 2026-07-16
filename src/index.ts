@@ -1,5 +1,5 @@
 /**
- * eslint-plugin-css-order: enforce CSS property order for @eslint/css.
+ * eslint-plugin-css-properties-order: enforce CSS property order for @eslint/css.
  *
  * Ported from stylelint-order (https://github.com/hudochenkov/stylelint-order).
  */
@@ -26,7 +26,7 @@ type CssOrderPlugin = {
 
 const plugin: CssOrderPlugin = {
   meta: {
-    name: "eslint-plugin-css-order",
+    name: "eslint-plugin-css-properties-order",
     version: pkg.version,
   },
   rules: {
