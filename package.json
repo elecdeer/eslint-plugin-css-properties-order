@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-css-properties-order",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "description": "ESLint plugin to enforce CSS property order for @eslint/css, ported from stylelint-order.",
   "keywords": [
     "css",
