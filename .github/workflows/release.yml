@@ -5,7 +5,11 @@ name: Release
 #   2. main に未消費の intent があると、このワークフローが `pnpm version -r` を
 #      適用した Release PR (release/main ブランチ) を作成/更新する
 #   3. Release PR をマージすると、このワークフローが npm へ OIDC (trusted
-#      publishing) で publish し、git タグと GitHub Release を作成する
+#      publishing) 経由で `pnpm stage publish` を実行し、git タグと GitHub
+#      Release を作成する
+#   4. `pnpm stage publish` はステージング登録のみを行い 2FA を要求しない。
+#      実際に npm 上で公開されるには、メンテナが npmjs.com またはローカル
+#      CLI (`pnpm stage approve`) で 2FA 認証込みの承認を行う必要がある。
 #
 # 注意: 初回 publish は npm の仕様上 OIDC では行えないため手動で行うこと。
 # 以降は npmjs.com のパッケージ設定で Trusted Publisher (このリポジトリ +
@@ -114,10 +118,12 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # OIDC (trusted publishing) で publish する。provenance も自動付与される
-      - name: Publish to npm
+      # OIDC (trusted publishing) でステージング登録する。provenance も自動付与される。
+      # 2FA は不要だが、実際に npm 上で公開されるにはメンテナによる承認
+      # (pnpm stage approve / npmjs.com) が別途必要。
+      - name: Stage publish to npm
         if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
-        run: pnpm publish --access public --provenance --no-git-checks
+        run: pnpm stage publish --access public --provenance --no-git-checks
 
       - name: Create GitHub Release
         if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
@@ -132,6 +138,10 @@ jobs:
             --notes-file ".changeset/changelogs/$NAME@$VERSION.md"
 
           {
-            echo "## Published"
-            echo "v$VERSION を npm に publish し、GitHub Release を作成しました。"
+            echo "## Staged for publishing"
+            echo "v$VERSION を npm にステージング登録し、GitHub Release を作成しました。"
+            echo
+            echo "**npm 上ではまだ非公開です。** 公開するにはメンテナが以下のいずれかで承認 (2FA) してください:"
+            echo "- npmjs.com のパッケージページから承認する"
+            echo "- ローカルで \`pnpm stage approve $NAME@$VERSION\` を実行する"
           } >> "$GITHUB_STEP_SUMMARY"
