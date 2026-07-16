@@ -46,6 +46,13 @@ jobs:
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
+      # setup-vp は vp のみを PATH に通し、生の pnpm バイナリは公開しない。
+      # このワークフローは pnpm change / version / stage publish など vp に
+      # 対応コマンドが無い pnpm 固有のコマンドを直接使うため、corepack 経由で
+      # packageManager に pin された pnpm を PATH に公開する。
+      - name: Enable corepack
+        run: corepack enable
+
       # 未消費の change intent があるかで「Release PR 更新」か「publish 判定」に分岐する
       - name: Detect pending change intents
         id: plan
