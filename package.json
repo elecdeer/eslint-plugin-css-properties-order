@@ -42,12 +42,10 @@
   },
   "devDependencies": {
     "@eslint/core": "^1.2.1",
-    "@eslint/css": "^1.4.0",
-    "@eslint/css-tree": "^4.0.4",
-    "@types/node": "^26.1.1",
-    "@typescript/native-preview": "7.0.0-dev.20260707.2",
-    "bumpp": "^11.1.0",
-    "eslint": "^10.7.0",
+    "@eslint/css": "^2.0.1",
+    "@eslint/css-tree": "^4.1.2",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
     "typescript": "^7.0.2",
     "vite-plus": "catalog:"
   },
@@ -55,5 +53,5 @@
     "@eslint/css": ">=1.0.0",
     "eslint": ">=9.15.0"
   },
-  "packageManager": "pnpm@11.13.0"
+  "packageManager": "pnpm@12.15.0"
 }
