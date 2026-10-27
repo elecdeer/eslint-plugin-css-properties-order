@@ -2,3 +2,7 @@ eslint-plugin-css-properties-order@0.0.1:
   dir: ""
   intents:
     - tidy-emus-open
+eslint-plugin-css-properties-order@0.0.2:
+  dir: ""
+  intents:
+    - clean-eggs-roll
