@@ -10,6 +10,10 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 
 `vp <name>` runs a built-in command. `vp run <name>` runs a `package.json` script or a `vite.config.ts` task. Scripts cannot overwrite built-ins, so `vp dev` and `vp run dev` may do different things. Check `package.json` and `vite.config.ts` first, and run `vp run <name>` when the project defines a script or task with that name.
 
+## Running Scripts
+
+Run TypeScript and JavaScript files with `vpx <file>`, for example `vpx ./scripts/seed.ts --dry-run`. It handles enums, decorators, JSX, and tsconfig `paths`, so do not add `tsx` or `ts-node` to run scripts. `vpx --watch <file>` reruns the file when a file it uses changes, in place of `tsx watch`. `vp node <file>` runs plain Node.js.
+
 ## Tool Versions
 
 Run `vp toolchain` to show versions and relationships in the active Vite+
@@ -25,3 +29,9 @@ release. Add a tool name to select part of the graph. For example, run
 - [ ] If setup, runtime, or package-manager behavior looks wrong, run `vp env doctor` and include its output when asking for help.
 
 <!--VITE PLUS END-->
+
+## Release
+
+- Versioning uses pnpm's built-in release management (`pnpm change` / `pnpm version -r`), not the Changesets CLI.
+- For any change that affects the published package, record a change intent before pushing: `pnpm change --bump <patch|minor|major> --summary "<changelog entry>" eslint-plugin-css-properties-order`. Use `--bump none` for changes that need no release.
+- On push to `main`, `.github/workflows/release.yml` opens/updates the `release/main` PR from pending intents. Merging it stages the version on npm via Trusted Publishing (`pnpm stage publish`) and creates the GitHub Release; a maintainer then approves the staged version with 2FA (npmjs.com or `pnpm stage approve <name>@<version>`) to make it public.

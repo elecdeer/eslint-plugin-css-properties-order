@@ -17,83 +17,90 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: ["main"]
   workflow_dispatch:
+
+permissions: {}
 
 # Release PR の更新と publish が並行しないよう直列化する (キャンセルはしない)
 concurrency:
-  group: release
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write # release/main ブランチの push と GitHub Release の作成
-      pull-requests: write # Release PR の作成・更新
-      id-token: write # npm への OIDC publish
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+env:
+  RELEASE_BRANCH: release/main
 
-      - uses: voidzero-dev/setup-vp@250f29ce396baf5e8f24498e17c0dfdebabc26eb # v1.15.0
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # release/main ブランチへの push
+      pull-requests: write # Release PR の作成・更新
+    outputs:
+      should-publish: ${{ steps.publish-check.outputs.should-publish }}
+      name: ${{ steps.publish-check.outputs.name }}
+      version: ${{ steps.publish-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # キャッシュ汚染を避けるため release ワークフローでは依存キャッシュを使わない
+      - uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
         with:
           node-version: "26"
-          cache: true
           # frozen-lockfile 付きで明示的にインストールするため、自動インストールは無効化する
           run-install: false
 
       - name: Install dependencies
         run: vp install --frozen-lockfile
 
-      # setup-vp は vp のみを PATH に通し、生の pnpm バイナリは公開しない。
-      # このワークフローは pnpm change / version / stage publish など vp に
-      # 対応コマンドが無い pnpm 固有のコマンドを直接使うため、corepack 経由で
-      # packageManager に pin された pnpm を PATH に公開する。
-      - name: Enable corepack
-        run: corepack enable
-
-      # 未消費の change intent があるかで「Release PR 更新」か「publish 判定」に分岐する
-      - name: Detect pending change intents
-        id: plan
+      # intent を消費して version bump + changelog 生成 + ledger 記録を行う
+      - name: Apply change intents
+        id: apply
         run: |
-          if pnpm change status | grep -q "Pending change intents:"; then
-            echo "pending=true" >> "$GITHUB_OUTPUT"
+          pnpm version -r
+          # `--bump none` の intent だけでも intent ファイルの削除で差分が出るため、
+          # working tree 全体ではなく package.json の変更 (= バージョンが上がったか) で判定する
+          if ! git diff --quiet -- ':(glob)**/package.json'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "pending=false" >> "$GITHUB_OUTPUT"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create or update release PR
-        if: steps.plan.outputs.pending == 'true'
+        if: steps.apply.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # checkout では認証情報を残さず、push するこのステップでのみ gh の credential helper を使う
+          gh auth setup-git
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -C release/main
-
-          # intent を消費して version bump + changelog 生成 + ledger 記録を行う
-          pnpm version -r
 
           VERSION=$(jq -r '.version' package.json)
           NAME=$(jq -r '.name' package.json)
-          git add -A
-          git commit -m "chore: release v$VERSION"
-          git push -f origin release/main
-
           TITLE="chore: release v$VERSION"
+
+          git switch -C "$RELEASE_BRANCH"
+          git add -A
+          # pre-commit フック (vp staged) は CI では不要なので --no-verify
+          git commit --no-verify -m "$TITLE"
+          git push --force origin "$RELEASE_BRANCH"
+
           BODY_FILE=$(mktemp)
           {
-            echo "このPRをマージすると v$VERSION が npm に publish されます。"
+            echo "このPRをマージすると v$VERSION が npm にステージング登録されます。"
             echo
             cat ".changeset/changelogs/$NAME@$VERSION.md"
           } > "$BODY_FILE"
 
-          PR_NUMBER=$(gh pr list --head release/main --state open --json number --jq '.[0].number // empty')
+          PR_NUMBER=$(gh pr list --head "$RELEASE_BRANCH" --state open --json number --jq '.[0].number // empty')
           if [ -n "$PR_NUMBER" ]; then
             gh pr edit "$PR_NUMBER" --title "$TITLE" --body-file "$BODY_FILE"
           else
-            gh pr create --head release/main --title "$TITLE" --body-file "$BODY_FILE"
+            gh pr create --base main --head "$RELEASE_BRANCH" --title "$TITLE" --body-file "$BODY_FILE"
           fi
 
           {
@@ -101,43 +108,80 @@ jobs:
             echo "v$VERSION の Release PR を作成/更新しました。"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Check whether current version needs publishing
-        if: steps.plan.outputs.pending == 'false'
-        id: check
+      # pnpm version -r で作られた (ledger に記録された) バージョンだけを publish 対象にする。
+      # 初期バージョンなど ledger にないバージョンを CI が勝手に publish しないようにするため。
+      # また Trusted Publisher は npm 上に既存のパッケージにしか設定できないので、
+      # パッケージ自体が未公開 (初回リリース) の場合は CI では publish せず手動 publish に任せる。
+      - name: Check whether to publish
+        id: publish-check
+        if: steps.apply.outputs.changed == 'false'
         run: |
-          VERSION=$(jq -r '.version' package.json)
           NAME=$(jq -r '.name' package.json)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION=$(jq -r '.version' package.json)
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-          # Release PR を経ていない version (changelog が無い) は publish しない
-          if [ ! -f ".changeset/changelogs/$NAME@$VERSION.md" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "changelog が無いため publish しません (v$VERSION)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-
-          # 既に npm に存在する version は publish しない
-          if pnpm view "$NAME@$VERSION" version > /dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "v$VERSION は公開済みのため publish しません" >> "$GITHUB_STEP_SUMMARY"
+          SHOULD_PUBLISH=false
+          REASON=""
+          if ! grep -qF "$NAME@$VERSION:" .changeset/ledger.yaml 2>/dev/null; then
+            REASON="ledger に記録されていないバージョン"
+          elif [ -z "$(pnpm view "$NAME" name 2>/dev/null || true)" ]; then
+            REASON="npm 上にパッケージが存在しない (初回リリースは手動で publish する)"
+          elif [ -n "$(pnpm view "$NAME@$VERSION" version 2>/dev/null || true)" ]; then
+            REASON="公開済み"
           else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+            SHOULD_PUBLISH=true
           fi
+          echo "should-publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Publish check"
+            echo "\`$NAME@$VERSION\`: should-publish=$SHOULD_PUBLISH ${REASON:+($REASON)}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    needs: version
+    if: needs.version.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # id-token はこのジョブにだけ付与する (Trusted Publishing 用)
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: voidzero-dev/setup-vp@cab1ab9eaff52d4857875f4f2c016e36af8f2c76 # v1.22.0
+        with:
+          node-version: "26"
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
 
       # OIDC (trusted publishing) でステージング登録する。provenance も自動付与される。
       # 2FA は不要だが、実際に npm 上で公開されるにはメンテナによる承認
-      # (pnpm stage approve / npmjs.com) が別途必要。
+      # (pnpm stage approve / npmjs.com) が別途必要。ビルドは prepublishOnly で実行される。
       - name: Stage publish to npm
-        if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
         run: pnpm stage publish --access public --provenance --no-git-checks
 
+  github-release:
+    needs: [version, publish]
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: write # git タグと GitHub Release の作成
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Create GitHub Release
-        if: steps.plan.outputs.pending == 'false' && steps.check.outputs.publish == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.check.outputs.version }}
-          NAME: ${{ steps.check.outputs.name }}
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           gh release create "v$VERSION" \
             --target "$GITHUB_SHA" \
